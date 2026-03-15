@@ -17,7 +17,8 @@ async def process_chat_intent(message: str) -> ChatCompletionResponse:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message}
         ],
-        "temperature": 0.1
+        "temperature": 0.1,
+        "max_tokens": 10
     }
     
     async with httpx.AsyncClient(timeout=30.0) as client:
