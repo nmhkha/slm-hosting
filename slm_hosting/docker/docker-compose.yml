@@ -1,37 +1,45 @@
 version: '3.8'
 
 services:
-  # 1. Tầng Model 
-  #vllm-service:
-  #image: ollama/ollama:latest
-  #container_name: slm_ollama
-  #volumes:
-  #- ollama_data:/root/.ollama
-  #ports:
-  #- "11434:11434"
-  # Khởi động server và tự động tải model Qwen
-  #entrypoint: /bin/sh -c "ollama serve & sleep 5 && ollama pull qwen2.5:1.5b && wait"
+  # 1. Model (Ollama)
+  vllm-service:
+    image: ollama/ollama:latest
+    container_name: slm_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    # Kéo model qwen2.5:1.5b khi khởi động
+    entrypoint: /bin/sh -c "ollama serve & sleep 5 && ollama pull qwen2.5:1.5b && wait"
+    # Thêm healthcheck để báo hiệu cho các service khác khi nào Ollama sẵn sàng
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 300s # Cho model một khoảng thời gian để tải về và nạp vào RAM/VRAM
 
-  # 2. Tầng Nghiệp vụ
+  # 2. API Wrapper
   api-wrapper:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: slm_api
     environment:
-      # Trỏ URL nội bộ về phía container ollama
-      - VLLM_URL=http://vllm-service:11434/v1/chat/completions
-      #depends_on:
-      #- vllm-service
+      - OLLAMA_URL=http://vllm-service:11434/v1/chat/completions
+      - MODEL_NAME=qwen2.5:1.5b
+    depends_on:
+      vllm-service:
+        condition: service_healthy #khởi động API khi Ollama đã báo "healthy"
 
-      # 3. Tầng Proxy
+  # 3. Tầng Proxy (Nginx)
   nginx:
     image: nginx:latest
     container_name: slm_nginx
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "80:80" # Publish ra port 80 mặc định
+      - "80:80"
     depends_on:
       - api-wrapper
 
